@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use Exception;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -30,15 +31,8 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request)
     {
-        Log::info('Iniciando proceso de autenticación', [
-            'ip' => $request->ip(),
-            'user_agent' => $request->userAgent(),
-            'wants_json' => $request->wantsJson(),
-            'is_api' => $request->is('api/*'),
-            'content_type' => $request->header('Content-Type'),
-            'accept' => $request->header('Accept'),
-            'x_requested_with' => $request->header('X-Requested-With'),
-        ]);
+
+        info($request->all());
 
         if (!Auth::attempt($request->only('email', 'password'), $request->boolean('remember'))) {
             Log::warning('Credenciales inválidas', ['email' => $request->email]);
@@ -83,7 +77,7 @@ class AuthenticatedSessionController extends Controller
                         ]
                     ]
                 ]);
-            } catch (\Exception $e) {
+            } catch (Exception $e) {
                 Log::error('Error al generar token', [
                     'error' => $e->getMessage(),
                     'trace' => $e->getTraceAsString()

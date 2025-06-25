@@ -55,7 +55,7 @@ const submit = async () => {
             remember: form.value.remember
         }, {
             onSuccess: () => {
-                router.visit('/dashboard', { replace: true });
+                // router.visit('/dashboard', { replace: true });
             },
             onError: (errors) => {
                 if (errors.email) {
