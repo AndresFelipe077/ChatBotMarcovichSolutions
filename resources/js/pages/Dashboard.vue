@@ -1,4 +1,10 @@
 <script setup lang="ts">
+declare global {
+    interface Window {
+        Toast: any;
+    }
+}
+
 import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/vue3';
