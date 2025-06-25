@@ -3,8 +3,6 @@ import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import { Head, router } from '@inertiajs/vue3';
 import { LoaderCircle } from 'lucide-vue-next';
-import { toast } from 'vue-sonner';
-import taskService from '@/services/taskService';
 import InputError from '@/components/InputError.vue';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -57,16 +55,9 @@ const submit = async () => {
             remember: form.value.remember
         }, {
             onSuccess: () => {
-                // Show success message
-                toast.success('¡Bienvenido!', {
-                    description: 'Has iniciado sesión correctamente.'
-                });
-
-                // Redirect to dashboard using Inertia
                 router.visit('/dashboard', { replace: true });
             },
             onError: (errors) => {
-                // Handle validation errors
                 if (errors.email) {
                     form.value.errors.email = Array.isArray(errors.email) ? errors.email[0] : errors.email;
                 }
@@ -74,22 +65,12 @@ const submit = async () => {
                 if (errors.password) {
                     form.value.errors.password = Array.isArray(errors.password) ? errors.password[0] : errors.password;
                 }
-
-                // Show general error message if no specific field errors
-                if (!form.value.errors.email && !form.value.errors.password && errors.message) {
-                    toast.error('Error', {
-                        description: errors.message
-                    });
-                }
             },
             preserveState: true,
             preserveScroll: true
         });
     } catch (error) {
         console.error('Login error:', error);
-        toast.error('Error', {
-            description: 'Ocurrió un error al intentar iniciar sesión. Por favor, inténtalo de nuevo.'
-        });
     } finally {
         form.value.processing = false;
     }
