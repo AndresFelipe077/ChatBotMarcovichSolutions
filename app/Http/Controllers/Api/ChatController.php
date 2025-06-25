@@ -92,9 +92,9 @@ class ChatController extends Controller
 
             return response()->json([
                 'success' => true,
-                'data' => [
+                'data'    => [
                     'message' => $aiMessage,
-                    'chat' => $chat->fresh()
+                    'chat'    => $chat->fresh()
                 ]
             ]);
         } catch (Exception $e) {

@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { router, usePage } from '@inertiajs/vue3';
+import axios from 'axios';
 
 // Message structure
 const messages = ref([
@@ -26,6 +27,27 @@ const scrollToBottom = () => {
   });
 };
 
+// Get current chat ID from URL or props
+const chatId = ref(null);
+const isLoadingChat = ref(false);
+
+// Get current user
+const user = usePage().props.auth.user;
+
+const getAuthHeaders = () => {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    };
+
+    const token = localStorage.getItem('access_token');
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    return headers;
+};
+
 // Send message function
 const sendMessage = async () => {
   if (!newMessage.value.trim() || isSending.value) return;
@@ -47,24 +69,93 @@ const sendMessage = async () => {
     messages.value.push(userMessage);
     scrollToBottom();
 
-    // Here you would typically make an API call
-    // For now, we'll simulate a response
-    setTimeout(() => {
-      const botResponse = {
+    const headers = getAuthHeaders();
+
+    try {
+      // Create a new chat if one doesn't exist
+      if (!chatId.value) {
+        isLoadingChat.value = true;
+        const chatResponse = await axios.post('/api/chats', {
+          title: `Chat - ${new Date().toLocaleString()}`,
+          user_id: user?.id
+        }, { headers });
+
+        console.log('Chat creation response:', chatResponse.data);
+
+        if (chatResponse.data.success && chatResponse.data.data) {
+          chatId.value = chatResponse.data.data.id;
+          console.log('New chat created with ID:', chatId.value);
+        } else {
+          throw new Error('La respuesta del servidor no contiene los datos del chat');
+        }
+      }
+
+      if (!chatId.value) {
+        throw new Error('No se pudo crear o obtener el ID del chat');
+      }
+
+      // Send message to API
+      console.log('Sending message to chat ID:', chatId.value);
+      const response = await axios.post(
+        `/api/chats/${chatId.value}/messages`,
+        {
+          content: content,
+          role: 'user'
+        },
+        { headers }
+      );
+
+      console.log('API Response:', response.data);
+
+      if (response.data.success && response.data.data.message) {
+        const botResponse = {
+          id: Date.now() + 1,
+          content: response.data.data.message.content,
+          role: 'assistant',
+          timestamp: new Date()
+        };
+
+        messages.value.push(botResponse);
+        scrollToBottom();
+        return botResponse.content;
+      } else {
+        throw new Error('No se pudo obtener una respuesta del asistente');
+      }
+    } catch (error) {
+      console.error('Error in chat operations:', error);
+
+      // Show error message in chat
+      const errorMessage = {
         id: Date.now() + 1,
-        content: `Recibí tu mensaje: "${content}". Esta es una respuesta simulada.`,
+        content: 'Lo siento, ha ocurrido un error al procesar tu mensaje. Por favor, inténtalo de nuevo.',
         role: 'assistant',
         timestamp: new Date()
       };
 
-      messages.value.push(botResponse);
-      isSending.value = false;
+      messages.value.push(errorMessage);
       scrollToBottom();
-    }, 1000);
+
+      throw error;
+    } finally {
+      isLoadingChat.value = false;
+    }
 
   } catch (err) {
     console.error('Error sending message:', err);
+
+    // Add error message to chat
+    const errorMessage = {
+      id: Date.now() + 1,
+      content: 'Lo siento, ha ocurrido un error al procesar tu mensaje. Por favor, inténtalo de nuevo.',
+      role: 'assistant',
+      timestamp: new Date()
+    };
+
+    messages.value.push(errorMessage);
+    scrollToBottom();
+
     error.value = 'Error al enviar el mensaje. Inténtalo de nuevo.';
+  } finally {
     isSending.value = false;
   }
 };
