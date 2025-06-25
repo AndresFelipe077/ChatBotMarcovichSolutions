@@ -10,13 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import AuthBase from '@/layouts/AuthLayout.vue';
 
-// Definir las props
 const props = defineProps<{
     status?: string;
     canResetPassword: boolean;
 }>();
 
-// Estado del formulario
 interface FormData {
     email: string;
     password: string;
@@ -33,7 +31,6 @@ const form = ref<FormData>({
     processing: false
 });
 
-// Cargar credenciales guardadas al montar el componente
 onMounted(() => {
     const savedEmail = localStorage.getItem('saved_email');
     if (savedEmail) {
@@ -49,25 +46,44 @@ const submit = async () => {
     form.value.errors = {};
 
     try {
-        await router.post('/login', {
-            email: form.value.email,
-            password: form.value.password,
-            remember: form.value.remember
-        }, {
-            onSuccess: () => {
-                // router.visit('/dashboard', { replace: true });
-            },
-            onError: (errors) => {
-                if (errors.email) {
-                    form.value.errors.email = Array.isArray(errors.email) ? errors.email[0] : errors.email;
-                }
+        await new Promise<void>((resolve, reject) => {
+            router.post('/login', {
+                email: form.value.email,
+                password: form.value.password,
+                remember: form.value.remember
+            }, {
+                onSuccess: async () => {
+                    try {
+                        const response = await axios.post('/api/auth/token', {
+                            email: form.value.email,
+                            password: form.value.password
+                        });
 
-                if (errors.password) {
-                    form.value.errors.password = Array.isArray(errors.password) ? errors.password[0] : errors.password;
-                }
-            },
-            preserveState: true,
-            preserveScroll: true
+                        if (response.data?.data?.access_token) {
+                            localStorage.setItem('access_token', response.data.data.access_token);
+                            console.log('Token guardado en localStorage');
+                        }
+                        router.visit('/dashboard', { replace: true });
+                        resolve();
+                    } catch (apiError) {
+                        console.error('Error al obtener el token de API:', apiError);
+                        router.visit('/dashboard', { replace: true });
+                        resolve();
+                    }
+                },
+                onError: (errors: Record<string, string | string[]>) => {
+                    if (errors.email) {
+                        form.value.errors.email = Array.isArray(errors.email) ? errors.email[0] : errors.email;
+                    }
+
+                    if (errors.password) {
+                        form.value.errors.password = Array.isArray(errors.password) ? errors.password[0] : errors.password;
+                    }
+                    reject(errors);
+                },
+                preserveState: true,
+                preserveScroll: true
+            });
         });
     } catch (error) {
         console.error('Login error:', error);

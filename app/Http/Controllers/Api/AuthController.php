@@ -13,6 +13,44 @@ use Tymon\JWTAuth\Exceptions\JWTException;
 
 class AuthController extends Controller
 {
+    /**
+     * Generate a new API token for the authenticated user
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function token(Request $request)
+    {
+        $credentials = $request->only('email', 'password');
+
+        try {
+            if (!$token = JWTAuth::attempt($credentials)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Credenciales inválidas'
+                ], 401);
+            }
+
+            // Get TTL from JWT config (in minutes, converting to seconds)
+            $ttl = config('jwt.ttl') * 60;
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'access_token' => $token,
+                    'token_type' => 'bearer',
+                    'expires_in' => $ttl
+                ]
+            ]);
+        } catch (JWTException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No se pudo crear el token',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
     public function register(Request $request): JsonResponse
     {
         $request->validate([
