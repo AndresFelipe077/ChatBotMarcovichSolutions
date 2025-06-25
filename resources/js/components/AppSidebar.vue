@@ -78,11 +78,11 @@ const createNewChat = async () => {
                 title: 'Nuevo chat',
             })
         });
-        
+
         if (!response.ok) {
             throw new Error('Failed to create chat');
         }
-        
+
         const newChat = await response.json();
         await router.visit(`/chats/${newChat.id}`);
         await fetchChats();
@@ -115,16 +115,16 @@ onMounted(() => {
 
         <SidebarContent class="flex-1 overflow-y-auto">
             <NavMain :items="mainNavItems" />
-            
+
             <!-- Chats Section -->
             <div class="px-3 py-2">
                 <div class="flex items-center justify-between mb-2 px-2">
                     <h3 class="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         Chats
                     </h3>
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
+                    <Button
+                        variant="ghost"
+                        size="icon"
                         class="h-6 w-6"
                         @click="createNewChat"
                         :disabled="isLoading"
@@ -133,24 +133,24 @@ onMounted(() => {
                         <span class="sr-only">Nuevo chat</span>
                     </Button>
                 </div>
-                
+
                 <ul v-if="!isLoading" class="space-y-1">
-                    <ChatListItem 
-                        v-for="chat in chats" 
-                        :key="chat.id" 
+                    <ChatListItem
+                        v-for="chat in chats"
+                        :key="chat.id"
                         :chat="chat"
-                        :is-active="activeChatId === chat.id.toString()"
-                    />
+                        />
+                        <!-- :is-active="chat && (activeChatId === chat.id.toString())" -->
                 </ul>
-                
+
                 <div v-else class="flex justify-center py-4">
                     <div class="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
                 </div>
-                
+
                 <div v-if="!isLoading && chats.length === 0" class="text-center py-4 text-sm text-muted-foreground">
                     <p>No hay chats recientes</p>
-                    <Button 
-                        variant="link" 
+                    <Button
+                        variant="link"
                         class="mt-2 text-sm h-auto p-0"
                         @click="createNewChat"
                     >

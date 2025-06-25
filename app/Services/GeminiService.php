@@ -5,7 +5,7 @@ namespace App\Services;
 use Illuminate\Support\Facades\Http;
 class GeminiService
 {
-    public function chat($messages)
+    public function chat($messages): mixed
     {
         $apiKey = config('services.gemini.api_key');
 
