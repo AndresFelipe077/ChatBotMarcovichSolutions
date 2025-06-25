@@ -8,7 +8,7 @@ Route::post('register', [AuthController::class, 'register']);
 Route::post('login', [AuthController::class, 'login']);
 Route::post('auth/token', [AuthController::class, 'token']);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('jwt')->group(function () {
     Route::get('user', [AuthController::class, 'getUser']);
     Route::put('user', [AuthController::class, 'updateUser']);
     Route::post('logout', [AuthController::class, 'logout']);

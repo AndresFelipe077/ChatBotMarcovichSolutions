@@ -49,15 +49,42 @@ const activeChatId = computed(() => {
     return null;
 });
 
+// Helper function to get auth headers
+const getAuthHeaders = () => {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    };
+    
+    const token = localStorage.getItem('access_token');
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    return headers;
+};
+
 // Fetch chats
 const fetchChats = async () => {
     try {
         isLoading.value = true;
-        const response = await fetch('/api/chats');
+        const response = await fetch('/api/chats', {
+            headers: getAuthHeaders()
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch chats');
+        }
+        
         const data = await response.json();
         chats.value = data;
     } catch (error) {
         console.error('Error fetching chats:', error);
+        // Optional: Handle token expiration or invalid token
+        if (error instanceof Error && error.message.includes('401')) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+        }
     } finally {
         isLoading.value = false;
     }
@@ -70,9 +97,8 @@ const createNewChat = async () => {
         const response = await fetch('/api/chats', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
+                ...getAuthHeaders(),
                 'X-CSRF-TOKEN': csrfToken,
-                'Accept': 'application/json',
             },
             body: JSON.stringify({
                 title: 'Nuevo chat',
@@ -80,7 +106,8 @@ const createNewChat = async () => {
         });
 
         if (!response.ok) {
-            throw new Error('Failed to create chat');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || 'Failed to create chat');
         }
 
         const newChat = await response.json();
@@ -88,6 +115,11 @@ const createNewChat = async () => {
         await fetchChats();
     } catch (error) {
         console.error('Error creating chat:', error);
+        // Optional: Handle token expiration or invalid token
+        if (error instanceof Error && error.message.includes('401')) {
+            localStorage.removeItem('access_token');
+            window.location.href = '/login';
+        }
     }
 };
 
