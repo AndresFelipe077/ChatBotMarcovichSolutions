@@ -1,19 +1,17 @@
 <?php
 
-namespace App\Http\Controllers\Api;
+namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
-use App\Models\Chat;
-use App\Models\Message;
+use Illuminate\Http\Request;
 use Google\Cloud\AIPlatform\V1\PredictionServiceClient;
 use Google\Cloud\AIPlatform\V1\Content;
+use Google\Cloud\AIPlatform\V1\GenerateContentResponse;
 use Google\Cloud\AIPlatform\V1\GenerationConfig;
 use Google\Cloud\AIPlatform\V1\SafetySetting;
 use Google\Cloud\AIPlatform\V1\HarmCategory;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
+use App\Models\Chat;
+use App\Models\Message;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
@@ -22,24 +20,21 @@ class ChatController extends Controller
 
     public function __construct()
     {
-        $this->modelName = 'projects/' . config('services.google_cloud.project_id') . '/locations/us-central1/publishers/google/models/gemini-1.5-pro';
+        $this->modelName = 'projects/your-project-id/locations/us-central1/publishers/google/models/gemini-1.5-pro';
         $this->predictionServiceClient = new PredictionServiceClient([
             'credentials' => config('services.google_cloud.credentials')
         ]);
     }
 
-    public function index(): JsonResponse
+    public function index()
     {
         $user = Auth::user();
         $chats = $user->chats()->with('messages')->latest()->get();
         
-        return response()->json([
-            'success' => true,
-            'data' => $chats
-        ]);
+        return response()->json($chats);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request)
     {
         $user = Auth::user();
         
@@ -47,25 +42,18 @@ class ChatController extends Controller
             'title' => 'Nueva conversación',
         ]);
 
-        return response()->json([
-            'success' => true,
-            'data' => $chat
-        ], 201);
+        return response()->json($chat, 201);
     }
 
-    public function show(Chat $chat): JsonResponse
+    public function show(Chat $chat)
     {
         $this->authorize('view', $chat);
         
         $chat->load('messages');
-        
-        return response()->json([
-            'success' => true,
-            'data' => $chat
-        ]);
+        return response()->json($chat);
     }
 
-    public function sendMessage(Request $request, Chat $chat): JsonResponse
+    public function sendMessage(Request $request, Chat $chat)
     {
         $this->authorize('update', $chat);
         
@@ -109,25 +97,19 @@ class ChatController extends Controller
             }
 
             return response()->json([
-                'success' => true,
-                'data' => [
-                    'message' => $aiMessage,
-                    'chat' => $chat->fresh()
-                ]
+                'message' => $aiMessage,
+                'chat' => $chat->fresh()
             ]);
 
         } catch (\Exception $e) {
-            Log::error('Error sending message: ' . $e->getMessage());
-            
             return response()->json([
-                'success' => false,
-                'message' => 'Error al procesar la solicitud',
-                'error' => config('app.debug') ? $e->getMessage() : null
+                'error' => 'Error al procesar la solicitud',
+                'message' => $e->getMessage()
             ], 500);
         }
     }
 
-    protected function generateContent(string $prompt, array $history = []): string
+    protected function generateContent(string $prompt, array $history = [])
     {
         $contents = [];
         
@@ -200,7 +182,7 @@ class ChatController extends Controller
             return $response->getCandidates()[0]->getContent()->getParts()[0]->getText();
 
         } catch (\Exception $e) {
-            Log::error('Error generating content with Gemini: ' . $e->getMessage());
+            \Log::error('Error generating content with Gemini: ' . $e->getMessage());
             throw $e;
         }
     }
@@ -227,11 +209,13 @@ class ChatController extends Controller
             );
 
             $title = $response->getCandidates()[0]->getContent()->getParts()[0]->getText();
-            return trim($title, '\'"');
+            return trim($title, '\"\'');
             
         } catch (\Exception $e) {
-            Log::error('Error generating chat title: ' . $e->getMessage());
+            \Log::error('Error generating chat title: ' . $e->getMessage());
             return 'Nueva conversación';
         }
     }
 }
+
+# cGFuZ29saW4=
