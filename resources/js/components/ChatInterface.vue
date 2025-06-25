@@ -1,17 +1,10 @@
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, nextTick, watch } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 
 // Message structure
-const messages = ref([
-  {
-    id: 1,
-    content: '¡Hola! Soy tu asistente de clima. ¿En qué puedo ayudarte hoy?',
-    role: 'assistant',
-    timestamp: new Date()
-  }
-]);
+const messages = ref([]);
 
 const newMessage = ref('');
 const isSending = ref(false);
@@ -30,6 +23,60 @@ const scrollToBottom = () => {
 // Get current chat ID from URL or props
 const chatId = ref(null);
 const isLoadingChat = ref(false);
+
+// Watch for route changes to load chat messages
+import { useRoute } from 'vue-router';
+const route = useRoute();
+
+// Load chat messages when chatId changes
+const loadChatMessages = async (id) => {
+  if (!id) return;
+  
+  try {
+    isLoadingChat.value = true;
+    messages.value = []; // Clear existing messages
+    
+    const headers = getAuthHeaders();
+    const response = await axios.get(`/api/chats/${id}`, { headers });
+    
+    if (response.data.success && response.data.data) {
+      const chatData = response.data.data;
+      
+      // Map API messages to our format
+      if (chatData.messages && chatData.messages.length > 0) {
+        messages.value = chatData.messages.map(msg => ({
+          id: msg.id,
+          content: msg.content,
+          role: msg.role,
+          timestamp: new Date(msg.created_at)
+        }));
+      } else {
+        // Add welcome message if no messages exist
+        messages.value = [{
+          id: 1,
+          content: '¡Hola! Soy tu asistente de clima. ¿En qué puedo ayudarte hoy?',
+          role: 'assistant',
+          timestamp: new Date()
+        }];
+      }
+      
+      scrollToBottom();
+    }
+  } catch (error) {
+    console.error('Error loading chat messages:', error);
+    error.value = 'No se pudieron cargar los mensajes del chat';
+  } finally {
+    isLoadingChat.value = false;
+  }
+};
+
+// Watch for route changes to load chat
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    chatId.value = newId;
+    loadChatMessages(newId);
+  }
+}, { immediate: true });
 
 // Get current user
 const user = usePage().props.auth.user;
@@ -170,6 +217,20 @@ const handleKeyDown = (e) => {
 
 // Initialize
 onMounted(() => {
+  // Load chat if ID is in URL
+  if (route.params.id) {
+    chatId.value = route.params.id;
+    loadChatMessages(route.params.id);
+  } else {
+    // Show welcome message for new chat
+    messages.value = [{
+      id: 1,
+      content: '¡Hola! Soy tu asistente de clima. ¿En qué puedo ayudarte hoy?',
+      role: 'assistant',
+      timestamp: new Date()
+    }];
+  }
+  
   scrollToBottom();
 });
 </script>

@@ -42,11 +42,19 @@ const chats = ref<Array<{
 
 const isLoading = ref(false);
 const activeChatId = computed(() => {
-    if (typeof window !== 'undefined') {
-        const match = window.location.pathname.match(/\/chats\/(\d+)/);
-        return match ? match[1] : null;
+    if (typeof window === 'undefined') return null;
+    
+    // Obtener el ID del chat de la URL actual
+    const match = window.location.pathname.match(/\/chats\/(\d+)/);
+    const urlChatId = match ? match[1] : null;
+    
+    // Si hay un chat en la URL, asegurarse de que exista en la lista
+    if (urlChatId && !chats.value.some(chat => chat.id.toString() === urlChatId)) {
+        // Si el chat no está en la lista, recargar los chats
+        fetchChats();
     }
-    return null;
+    
+    return urlChatId;
 });
 
 // Helper function to get auth headers
@@ -55,12 +63,12 @@ const getAuthHeaders = () => {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
     };
-    
+
     const token = localStorage.getItem('access_token');
     if (token) {
         headers['Authorization'] = `Bearer ${token}`;
     }
-    
+
     return headers;
 };
 
@@ -71,17 +79,24 @@ const fetchChats = async () => {
         const response = await fetch('/api/chats', {
             headers: getAuthHeaders()
         });
-        
+
         if (!response.ok) {
             throw new Error('Failed to fetch chats');
         }
+
+        const result = await response.json();
+        // Asegurarse de que los datos tengan el formato correcto
+        chats.value = result.data.map((chat: { id: string | number; title?: string; updated_at?: string }) => ({
+            id: chat.id,
+            title: chat.title || 'Chat sin título',
+            updated_at: chat.updated_at || new Date().toISOString()
+        }));
         
-        const data = await response.json();
-        chats.value = data;
+        console.log('Chats cargados:', chats.value);
     } catch (error) {
         console.error('Error fetching chats:', error);
-        // Optional: Handle token expiration or invalid token
-        if (error instanceof Error && error.message.includes('401')) {
+        // Manejar expiración de token
+        if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthenticated'))) {
             localStorage.removeItem('access_token');
             window.location.href = '/login';
         }
@@ -99,6 +114,8 @@ const createNewChat = async () => {
             headers: {
                 ...getAuthHeaders(),
                 'X-CSRF-TOKEN': csrfToken,
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
             },
             body: JSON.stringify({
                 title: 'Nuevo chat',
@@ -110,13 +127,25 @@ const createNewChat = async () => {
             throw new Error(errorData.message || 'Failed to create chat');
         }
 
-        const newChat = await response.json();
-        await router.visit(`/chats/${newChat.id}`);
-        await fetchChats();
+        const result = await response.json();
+        if (result.success && result.data) {
+            // Agregar el nuevo chat a la lista
+            const newChat = {
+                id: result.data.id,
+                title: result.data.title || 'Nuevo chat',
+                updated_at: result.data.updated_at || new Date().toISOString()
+            };
+            chats.value = [newChat, ...chats.value];
+            
+            // Navegar al nuevo chat
+            await router.visit(`/chats/${result.data.id}`, { preserveState: true });
+        } else {
+            throw new Error('No se pudo crear el chat correctamente');
+        }
     } catch (error) {
         console.error('Error creating chat:', error);
-        // Optional: Handle token expiration or invalid token
-        if (error instanceof Error && error.message.includes('401')) {
+        // Manejar expiración de token
+        if (error instanceof Error && (error.message.includes('401') || error.message.includes('Unauthenticated'))) {
             localStorage.removeItem('access_token');
             window.location.href = '/login';
         }
@@ -171,8 +200,8 @@ onMounted(() => {
                         v-for="chat in chats"
                         :key="chat.id"
                         :chat="chat"
+                        :is-active="activeChatId === chat.id.toString()"
                         />
-                        <!-- :is-active="chat && (activeChatId === chat.id.toString())" -->
                 </ul>
 
                 <div v-else class="flex justify-center py-4">

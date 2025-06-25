@@ -27,7 +27,7 @@ class ChatController extends Controller
     public function index(): JsonResponse
     {
         $user = Auth::user();
-        $chats = $user->chats()->with('messages')->latest()->get();
+        $chats = $user->chats()->latest()->get();
 
         return response()->json([
             'success' => true,
@@ -52,11 +52,17 @@ class ChatController extends Controller
     public function show(Chat $chat): JsonResponse
     {
         $this->authorize('view', $chat);
-        $chat->load('messages');
+        
+        $chat->load(['messages' => function($query) {
+            $query->orderBy('created_at', 'asc');
+        }]);
 
         return response()->json([
             'success' => true,
-            'data' => $chat
+            'data' => [
+                'chat' => $chat,
+                'messages' => $chat->messages
+            ]
         ]);
     }
 
