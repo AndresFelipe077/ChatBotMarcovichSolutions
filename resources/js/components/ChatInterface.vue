@@ -232,7 +232,6 @@ const sendMessage = async (): Promise<void> => {
     isSending.value = false;
   }
 
-
 };
 
 // Handle Enter key press

@@ -80,15 +80,32 @@ class ChatController extends Controller
         ]);
 
         try {
-            $messages = $chat->messages()->orderBy('created_at')->pluck('content')->toArray();
-            $messages[] = $request->content;
+            $userInput = $request->content;
+            $weatherResponse = $this->handleWeatherQuery($userInput);
 
-            $aiResponse = $this->gemini->chat($messages);
+            if ($weatherResponse) {
+                $aiMessage = $chat->messages()->create([
+                    'content' => $weatherResponse,
+                    'role'    => 'assistant',
+                    'is_weather' => true
+                ]);
+            } else {
+                $messages = $chat->messages()
+                    ->where('is_weather', false)
+                    ->orderBy('created_at')
+                    ->pluck('content')
+                    ->toArray();
 
-            $aiMessage = $chat->messages()->create([
-                'content' => $aiResponse,
-                'role'    => 'assistant',
-            ]);
+                $messages[] = $userInput;
+                $aiResponse = $this->gemini->chat($messages);
+
+                $aiMessage = $chat->messages()->create([
+                    'content' => $aiResponse,
+                    'role'    => 'assistant',
+                    'is_weather' => false
+                ]);
+            }
+
 
             if ($chat->title === 'Nueva conversación') {
                 $chat->update([
@@ -96,21 +113,111 @@ class ChatController extends Controller
                 ]);
             }
 
+
             return response()->json([
                 'success' => true,
                 'data'    => [
-                    'message' => $aiMessage,
+                    'chat_id' => $chat->id,
+                    'message' => $aiMessage->content,
                     'chat'    => $chat->fresh()
                 ]
             ]);
         } catch (Exception $e) {
-            Log::error('Error enviando mensaje a Gemini: ' . $e->getMessage());
+            Log::error('Error processing chat message: ' . $e->getMessage());
 
             return response()->json([
                 'success' => false,
-                'message' => 'Error al procesar la solicitud'
+                'message' => 'Error al procesar la solicitud',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
+    }
+
+
+    protected function handleWeatherQuery(string $message): ?string
+    {
+        // Check for weather-related keywords in Spanish
+        $weatherKeywords = ['clima', 'tiempo', 'temperatura', 'llover', 'lluvia', 'paraguas', 'soleado', 'nublado'];
+        $hasWeatherKeyword = preg_match('/\b(' . implode('|', $weatherKeywords) . ')\b/i', strtolower($message));
+
+        if (!$hasWeatherKeyword) {
+            return null;
+        }
+
+        // Extract city name using a simple pattern
+        $cityPattern = '/(?:en|para|de|el clima en|el tiempo en)\s+([^\s,.!?]+(?:\s+[^\s,.!?]+)*)/i';
+        $matches = [];
+
+        if (preg_match($cityPattern, strtolower($message), $matches)) {
+            $city = trim($matches[1]);
+        } else {
+            // Default city if none specified
+            $city = 'Bogotá';
+        }
+
+        // Check if asking for tomorrow's weather
+        $isTomorrow = preg_match('/mañana|pasado mañana|día siguiente|tomorrow/i', $message);
+        $date = $isTomorrow ? 'mañana' : 'hoy';
+
+        try {
+            $weatherData = $this->meteo->getWeather($city, $isTomorrow ? 'mañana' : 'today');
+
+            if (!$weatherData) {
+                return "No pude obtener la información del tiempo para {$city}. Por favor, intenta con otra ciudad o más tarde.";
+            }
+
+            $weatherCondition = $this->meteo->interpretWeatherCode($weatherData['weathercode']);
+            $emoji = $this->getWeatherEmoji($weatherData['weathercode']);
+
+            $response = "{$emoji} Clima en {$city} " . ($weatherData['is_tomorrow'] ? '(mañana)' : '(hoy)') . ":\n";
+            $response .= "- Temperatura: " . round($weatherData['temperature']) . "°C\n";
+            $response .= "- Condición: {$weatherCondition}\n";
+
+            // Add umbrella recommendation if relevant
+            if ($weatherData['precipitation'] > 0) {
+                $response .= "- Lluvia: " . round($weatherData['precipitation'], 1) . " mm\n";
+                if (strpos(strtolower($message), 'paraguas') !== false) {
+                    $response .= "\n¡Sí, lleva paraguas! " . $this->getUmbrellaEmoji() . "\n";
+                }
+            } elseif (strpos(strtolower($message), 'paraguas') !== false) {
+                $response .= "\nNo parece que vaya a llover, no necesitarás paraguas. " . $this->getSunEmoji() . "\n";
+            }
+
+            return $response;
+
+        } catch (\Exception $e) {
+            Log::error('Error getting weather: ' . $e->getMessage());
+            return null; // Let Gemini handle the response
+        }
+    }
+
+    protected function getWeatherEmoji(int $weatherCode): string
+    {
+        // Map weather codes to emojis
+        if ($weatherCode >= 0 && $weatherCode <= 3) {
+            return '☀️'; // Clear to overcast
+        } elseif ($weatherCode >= 45 && $weatherCode <= 48) {
+            return '🌫️'; // Fog
+        } elseif (($weatherCode >= 51 && $weatherCode <= 67) || ($weatherCode >= 80 && $weatherCode <= 82)) {
+            return '🌧️'; // Rain or showers
+        } elseif ($weatherCode >= 71 && $weatherCode <= 77) {
+            return '❄️'; // Snow
+        } elseif ($weatherCode >= 95 && $weatherCode <= 99) {
+            return '⛈️'; // Thunderstorm
+        }
+        return '🌡️'; // Default thermometer
+    }
+
+    protected function getUmbrellaEmoji(): string
+    {
+        $umbrellas = ['☔', '🌂', '🌧️'];
+        return $umbrellas[array_rand($umbrellas)];
+    }
+
+    protected function getSunEmoji(): string
+    {
+        $suns = ['☀️', '🌞', '😎'];
+        return $suns[array_rand($suns)];
     }
 
     protected function generateSimpleTitle(string $text): string
