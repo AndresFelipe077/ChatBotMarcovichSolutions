@@ -43,17 +43,17 @@ const chats = ref<Array<{
 const isLoading = ref(false);
 const activeChatId = computed(() => {
     if (typeof window === 'undefined') return null;
-    
+
     // Obtener el ID del chat de la URL actual
     const match = window.location.pathname.match(/\/chats\/(\d+)/);
     const urlChatId = match ? match[1] : null;
-    
+
     // Si hay un chat en la URL, asegurarse de que exista en la lista
     if (urlChatId && !chats.value.some(chat => chat.id.toString() === urlChatId)) {
         // Si el chat no está en la lista, recargar los chats
         fetchChats();
     }
-    
+
     return urlChatId;
 });
 
@@ -91,7 +91,7 @@ const fetchChats = async () => {
             title: chat.title || 'Chat sin título',
             updated_at: chat.updated_at || new Date().toISOString()
         }));
-        
+
         console.log('Chats cargados:', chats.value);
     } catch (error) {
         console.error('Error fetching chats:', error);
@@ -136,7 +136,7 @@ const createNewChat = async () => {
                 updated_at: result.data.updated_at || new Date().toISOString()
             };
             chats.value = [newChat, ...chats.value];
-            
+
             // Navegar al nuevo chat
             await router.visit(`/chats/${result.data.id}`, { preserveState: true });
         } else {
@@ -223,7 +223,6 @@ onMounted(() => {
         </SidebarContent>
 
         <SidebarFooter>
-            <NavFooter :items="footerNavItems" />
             <NavUser />
         </SidebarFooter>
     </Sidebar>

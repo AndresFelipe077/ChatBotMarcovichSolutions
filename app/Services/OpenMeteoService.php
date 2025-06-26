@@ -9,10 +9,10 @@ class OpenMeteoService
     public function getWeather(float $latitude, float $longitude): ?array
     {
         $res = Http::get('https://api.open-meteo.com/v1/forecast', [
-            'latitude' => $latitude,
+            'latitude'  => $latitude,
             'longitude' => $longitude,
-            'daily' => 'temperature_2m_max,temperature_2m_min,precipitation_sum',
-            'timezone' => 'auto'
+            'daily'     => 'temperature_2m_max,temperature_2m_min,precipitation_sum',
+            'timezone'  => 'auto'
         ]);
 
         return $res->ok() ? $res->json() : null;
@@ -21,9 +21,9 @@ class OpenMeteoService
     public function getCoordinates(string $city): ?array
     {
         $res = Http::get("https://nominatim.openstreetmap.org/search", [
-            'q' => $city,
+            'q'      => $city,
             'format' => 'json',
-            'limit' => 1,
+            'limit'  => 1,
         ]);
 
         if ($res->ok() && !empty($res[0])) {
