@@ -14,8 +14,8 @@ defineProps<{
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('es-ES', { 
-    day: '2-digit', 
+  return date.toLocaleDateString('es-ES', {
+    day: '2-digit',
     month: 'short',
     hour: '2-digit',
     minute: '2-digit'
@@ -26,7 +26,7 @@ const formatDate = (dateString: string) => {
 <template>
   <li>
     <Link
-      :href="`/chats/${chat.id}`"
+      :href="`/dashboard/${chat.id}`"
       class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
       :class="isActive ? 'bg-accent' : 'text-muted-foreground'"
     >

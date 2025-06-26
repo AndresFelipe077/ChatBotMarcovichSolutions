@@ -1,15 +1,32 @@
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted, nextTick, watch } from 'vue';
-import { router, usePage } from '@inertiajs/vue3';
+import { usePage } from '@inertiajs/vue3';
 import axios from 'axios';
 
-// Message structure
-const messages = ref([]);
+interface Message {
+  id: number | string;
+  content: string;
+  role: 'user' | 'assistant' | 'system';
+  timestamp: Date;
+  isTyping?: boolean;
+}
 
+interface Props {
+  chatId?: string | number | null;
+}
+
+const props = withDefaults(defineProps<Props>(), {
+  chatId: null
+});
+
+const page = usePage();
+const messages = ref<Message[]>([]);
 const newMessage = ref('');
 const isSending = ref(false);
-const error = ref(null);
-const messagesEndRef = ref(null);
+const error = ref<string | null>(null);
+const messagesEndRef = ref<HTMLElement | null>(null);
+const isLoadingChat = ref(false);
+const localChatId = ref<string | number | null>(props.chatId);
 
 // Scroll to bottom of chat
 const scrollToBottom = () => {
@@ -20,31 +37,51 @@ const scrollToBottom = () => {
   });
 };
 
-// Get current chat ID from URL or props
-const chatId = ref(null);
-const isLoadingChat = ref(false);
+interface ChatMessage {
+  id: number;
+  content: string;
+  role: 'user' | 'assistant' | 'system';
+  created_at: string;
+}
 
-// Watch for route changes to load chat messages
-import { useRoute } from 'vue-router';
-const route = useRoute();
+interface ChatResponse {
+  success: boolean;
+  data: {
+    chat: any;
+    messages: ChatMessage[];
+  };
+}
 
-// Load chat messages when chatId changes
-const loadChatMessages = async (id) => {
+const getAuthHeaders = () => {
+    const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+    };
+
+    const token = localStorage.getItem('access_token');
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    return headers;
+};
+
+const loadChatMessages = async (id: string | number) => {
   if (!id) return;
-  
+
   try {
     isLoadingChat.value = true;
-    messages.value = []; // Clear existing messages
-    
+    messages.value = [];
+
     const headers = getAuthHeaders();
-    const response = await axios.get(`/api/chats/${id}`, { headers });
-    
+    const response = await axios.get<ChatResponse>(`/api/chats/${id}`, { headers });
+
     if (response.data.success && response.data.data) {
       const chatData = response.data.data;
-      
+
       // Map API messages to our format
       if (chatData.messages && chatData.messages.length > 0) {
-        messages.value = chatData.messages.map(msg => ({
+        messages.value = chatData.messages.map((msg: ChatMessage) => ({
           id: msg.id,
           content: msg.content,
           role: msg.role,
@@ -59,179 +96,170 @@ const loadChatMessages = async (id) => {
           timestamp: new Date()
         }];
       }
-      
+
       scrollToBottom();
     }
-  } catch (error) {
-    console.error('Error loading chat messages:', error);
+  } catch (err) {
+    console.error('Error loading chat messages:', err);
     error.value = 'No se pudieron cargar los mensajes del chat';
   } finally {
     isLoadingChat.value = false;
   }
 };
 
-// Watch for route changes to load chat
-watch(() => route.params.id, (newId) => {
+// Watch for changes in the chat ID prop
+watch(() => props.chatId, (newId) => {
   if (newId) {
-    chatId.value = newId;
+    localChatId.value = newId;
     loadChatMessages(newId);
+  } else {
+    localChatId.value = null;
+    messages.value = [];
   }
 }, { immediate: true });
 
 // Get current user
-const user = usePage().props.auth.user;
+const user = page.props.auth.user;
 
-const getAuthHeaders = () => {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-    };
 
-    const token = localStorage.getItem('access_token');
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+
+// Create a new chat
+const createNewChat = async (): Promise<string | number | null> => {
+  try {
+    interface NewChatResponse {
+      success: boolean;
+      data: {
+        id: string | number;
+      };
     }
 
-    return headers;
+    const response = await axios.post<NewChatResponse>('/api/chats', {
+      title: 'Nuevo chat',
+      messages: []
+    }, {
+      headers: getAuthHeaders()
+    });
+
+    if (response.data.success) {
+      return response.data.data.id;
+    }
+  } catch (err) {
+    console.error('Error creating new chat:', err);
+    error.value = 'Error al crear un nuevo chat';
+  }
+  return null;
 };
 
 // Send message function
-const sendMessage = async () => {
+const sendMessage = async (): Promise<void> => {
   if (!newMessage.value.trim() || isSending.value) return;
 
   const content = newMessage.value.trim();
-  newMessage.value = '';
-  isSending.value = true;
-  error.value = null;
 
   try {
-    // Add user message to UI
-    const userMessage = {
+    isSending.value = true;
+
+    // Add user message to the chat
+    const userMessage: Message = {
       id: Date.now(),
-      content: content,
+      content,
       role: 'user',
       timestamp: new Date()
     };
 
-    messages.value.push(userMessage);
-    scrollToBottom();
+    messages.value = [...messages.value, userMessage];
+    newMessage.value = '';
 
-    const headers = getAuthHeaders();
+    // Get the current chat ID or create a new chat
+    const currentChatId = localChatId.value || (await createNewChat());
 
-    try {
-      // Create a new chat if one doesn't exist
-      if (!chatId.value) {
-        isLoadingChat.value = true;
-        const chatResponse = await axios.post('/api/chats', {
-          title: `Chat - ${new Date().toLocaleString()}`,
-          user_id: user?.id
-        }, { headers });
+    if (!currentChatId) {
+      throw new Error('No se pudo crear un nuevo chat');
+    }
 
-        console.log('Chat creation response:', chatResponse.data);
+    // Send message to the API
+    interface MessageResponse {
+      success: boolean;
+      data: {
+        chat_id: string | number;
+        message: string;
+      };
+    }
 
-        if (chatResponse.data.success && chatResponse.data.data) {
-          chatId.value = chatResponse.data.data.id;
-          console.log('New chat created with ID:', chatId.value);
-        } else {
-          throw new Error('La respuesta del servidor no contiene los datos del chat');
-        }
+    const response = await axios.post<MessageResponse>(`/api/chats/${currentChatId}/messages`, {
+      content,
+      role: 'user' as const
+    }, {
+      headers: getAuthHeaders()
+    });
+
+    if (response.data.success) {
+      // Update chat ID if this was a new chat
+      if (!localChatId.value) {
+        localChatId.value = response.data.data.chat_id;
+        // Update the URL to include the chat ID
+        window.history.pushState({}, '', `/dashboard/${response.data.data.chat_id}`);
       }
 
-      if (!chatId.value) {
-        throw new Error('No se pudo crear o obtener el ID del chat');
-      }
-
-      // Send message to API
-      console.log('Sending message to chat ID:', chatId.value);
-      const response = await axios.post(
-        `/api/chats/${chatId.value}/messages`,
-        {
-          content: content,
-          role: 'user'
-        },
-        { headers }
-      );
-
-      console.log('API Response:', response.data);
-
-      if (response.data.success && response.data.data.message) {
-        const botResponse = {
-          id: Date.now() + 1,
-          content: response.data.data.message.content,
-          role: 'assistant',
-          timestamp: new Date()
-        };
-
-        messages.value.push(botResponse);
-        scrollToBottom();
-        return botResponse.content;
-      } else {
-        throw new Error('No se pudo obtener una respuesta del asistente');
-      }
-    } catch (error) {
-      console.error('Error in chat operations:', error);
-
-      // Show error message in chat
-      const errorMessage = {
+      // Add assistant's response to the chat
+      const assistantMessage: Message = {
         id: Date.now() + 1,
-        content: 'Lo siento, ha ocurrido un error al procesar tu mensaje. Por favor, inténtalo de nuevo.',
+        content: response.data.data.message,
         role: 'assistant',
         timestamp: new Date()
       };
 
-      messages.value.push(errorMessage);
+      messages.value = [...messages.value, assistantMessage];
       scrollToBottom();
-
-      throw error;
-    } finally {
-      isLoadingChat.value = false;
+    } else {
+      throw new Error('Failed to send message');
     }
-
   } catch (err) {
     console.error('Error sending message:', err);
 
     // Add error message to chat
-    const errorMessage = {
+    const errorMessage: Message = {
       id: Date.now() + 1,
       content: 'Lo siento, ha ocurrido un error al procesar tu mensaje. Por favor, inténtalo de nuevo.',
       role: 'assistant',
       timestamp: new Date()
     };
 
-    messages.value.push(errorMessage);
+    messages.value = [...messages.value, errorMessage];
     scrollToBottom();
-
     error.value = 'Error al enviar el mensaje. Inténtalo de nuevo.';
   } finally {
     isSending.value = false;
   }
+
+
 };
 
 // Handle Enter key press
-const handleKeyDown = (e) => {
+const handleKeyDown = (e: KeyboardEvent) => {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     sendMessage();
   }
 };
 
+declare module '@vue/runtime-core' {
+  interface ComponentCustomProperties {
+    handleKeyDown: (e: KeyboardEvent) => void;
+  }
+}
+
 // Initialize
 onMounted(() => {
-  // Load chat if ID is in URL
-  if (route.params.id) {
-    chatId.value = route.params.id;
-    loadChatMessages(route.params.id);
-  } else {
-    // Show welcome message for new chat
-    messages.value = [{
-      id: 1,
-      content: '¡Hola! Soy tu asistente de clima. ¿En qué puedo ayudarte hoy?',
-      role: 'assistant',
-      timestamp: new Date()
-    }];
+  // Set up auto-scroll when messages change
+  watch(messages, () => {
+    scrollToBottom();
+  }, { deep: true });
+
+  // Load initial chat if ID is present
+  if (props.chatId) {
+    loadChatMessages(props.chatId);
   }
-  
-  scrollToBottom();
 });
 </script>
 

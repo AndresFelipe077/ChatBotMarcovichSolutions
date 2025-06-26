@@ -52,15 +52,15 @@ class ChatController extends Controller
     public function show(Chat $chat): JsonResponse
     {
         $this->authorize('view', $chat);
-        
-        $chat->load(['messages' => function($query) {
+
+        $chat->load(['messages' => function($query): void {
             $query->orderBy('created_at', 'asc');
         }]);
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'chat' => $chat,
+            'data'    => [
+                'chat'     => $chat,
                 'messages' => $chat->messages
             ]
         ]);
