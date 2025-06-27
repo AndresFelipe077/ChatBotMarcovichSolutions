@@ -76,8 +76,8 @@ Guía de instalación y uso rápido para evaluadores.
 
 ## Credenciales de Prueba
 
-- **Email:** admin@example.com
-- **Contraseña:** password
+- **Email:** test@gmail.com
+- **Contraseña:** 12345678
 
 ## Endpoints de la API
 

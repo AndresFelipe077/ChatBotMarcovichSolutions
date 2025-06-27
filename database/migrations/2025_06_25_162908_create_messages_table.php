@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('chat_id')->constrained()->onDelete('cascade');
             $table->text('content');
             $table->enum('role', ['user', 'assistant']);
+            $table->boolean('is_weather')->default(false);
             $table->timestamps();
         });
     }
